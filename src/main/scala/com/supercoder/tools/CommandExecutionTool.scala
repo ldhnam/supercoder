@@ -11,15 +11,15 @@ import io.circe.parser.*
 import java.util
 import scala.sys.process.*
 
-case class CodeExecutionToolArguments(command: String)
+case class CommandExecutionToolArguments(command: String)
 
-object CodeExecutionTool extends Tool {
+object CommandExecutionTool extends Tool {
 
   override val functionDefinition = FunctionDefinition
     .builder()
-    .name("code-execution")
+    .name("command-execution")
     .description(
-      "Execute a shell command. The query parameter should be a regular expression."
+      "Execute a shell command on the user's terminal, and pass the output back to the agent."
     )
     .parameters(
       FunctionParameters
@@ -34,7 +34,7 @@ object CodeExecutionTool extends Tool {
     .build()
 
   override def execute(arguments: String): String = {
-    val parsedArguments = decode[CodeExecutionToolArguments](arguments)
+    val parsedArguments = decode[CommandExecutionToolArguments](arguments)
     parsedArguments match {
       case Right(args) => {
         val command = args.command

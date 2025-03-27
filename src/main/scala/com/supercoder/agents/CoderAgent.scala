@@ -2,7 +2,7 @@ package com.supercoder.agents
 
 import com.openai.models.FunctionDefinition
 import com.supercoder.base.{BaseChatAgent, ToolCallDescription}
-import com.supercoder.tools.{CodeEditTool, CodeExecutionTool, CodeSearchTool, FileReadTool, ProjectStructureTool}
+import com.supercoder.tools.{CodeEditTool, CommandExecutionTool, CodeSearchTool, FileReadTool, ProjectStructureTool}
 
 val coderAgentPrompt = s"""
 You are a senior software engineer AI agent. Your task is to help the user with their coding needs.
@@ -13,7 +13,7 @@ You have access to the following tools:
 - ${ProjectStructureTool.functionDefinition.name}: ${ProjectStructureTool.functionDefinition.description}
 - ${FileReadTool.functionDefinition.name}: ${FileReadTool.functionDefinition.description}
 - ${CodeEditTool.functionDefinition.name}: ${CodeEditTool.functionDefinition.description}
-- ${CodeExecutionTool.functionDefinition.name}: ${CodeExecutionTool.functionDefinition.description}
+- ${CommandExecutionTool.functionDefinition.name}: ${CommandExecutionTool.functionDefinition.description}
 
 You can use these tools to help you with the user's request.
 
@@ -29,7 +29,7 @@ class CoderAgent()
     ProjectStructureTool,
     FileReadTool,
     CodeEditTool,
-    CodeExecutionTool
+    CommandExecutionTool
   )
 
   override def toolDefinitionList: List[FunctionDefinition] =
