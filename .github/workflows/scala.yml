@@ -1,0 +1,48 @@
+name: Scala CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [17, 21]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ matrix.java-version }}
+        distribution: 'temurin'
+        cache: 'sbt'
+    
+    - name: Run tests
+      run: sbt test
+    
+    - name: Build package
+      run: sbt Universal/packageBin
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: supercoder-package-java${{ matrix.java-version }}
+        path: target/universal/supercoder-*.zip
+        retention-days: 5
+
+    - name: Cleanup before cache
+      run: |
+        rm -rf "$HOME/.ivy2/local" || true
+        find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
+        find $HOME/.ivy2/cache                       -name "ivydata-*.properties" -delete || true
+        find $HOME/.cache/coursier/v1                -name "ivydata-*.properties" -delete || true
+        find $HOME/.sbt                              -name "*.lock"               -delete || true 
