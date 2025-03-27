@@ -21,6 +21,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetch all history for tags
     
     - name: Set up JDK
       uses: actions/setup-java@v4
@@ -35,26 +37,45 @@ jobs:
     - name: Run tests
       run: sbt test
     
-    - name: Build package
-      run: sbt Universal/packageBin
+    - name: Build universal package
+      run: sbt 'set version := "${{ github.ref_name }}"' Universal/packageBin
     
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: supercoder-package
-        path: target/universal/supercoder-*.zip
-        retention-days: 5
+    - name: Get package path
+      id: get_package
+      run: |
+        echo "PACKAGE_PATH=$(find target/universal -name 'supercoder-*.zip' -type f)" >> $GITHUB_ENV
+        echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
     - name: Create a Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: target/universal/supercoder-*.zip
-        name: Release ${{ github.ref_name }}
+        files: ${{ env.PACKAGE_PATH }}
+        name: Release ${{ env.VERSION }}
+        body: |
+          ## SuperCoder Release ${{ env.VERSION }}
+          
+          ### Installation
+          Download the zip file and extract it to your desired location.
+          
+          ### Running
+          After extraction, you can run the application using:
+          ```bash
+          ./bin/supercoder
+          ```
+          
+          ### Changes
+          See the commit history for detailed changes.
         draft: false
         prerelease: false
-        generate_release_notes: true
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: supercoder-package
+        path: ${{ env.PACKAGE_PATH }}
+        retention-days: 5
 
     - name: Cleanup before cache
       run: |
