@@ -1,20 +1,18 @@
 # SuperCoder
 
-Welcome to SuperCoder! A coding assistant that run in your terminal.
+Welcome to SuperCoder! A coding agent that runs in your terminal.
 
 ![image](https://github.com/user-attachments/assets/201d7b80-9fa0-43f0-a775-46fe7640ee5e)
 
-## Overview
+## Features
 
-SuperCoder is structured into several core modules:
+SuperCoder equips you with an array of powerful tools to simplify your development workflow. It offers the following features:
 
-- **Agents:** The intelligence layer that decides which tool to use based on user input. Currently, the `CoderAgent` is available in `src/main/scala/com/supercoder/agents/CoderAgent.scala`.
-
-- **Tools:** A set of modular utilities to perform code editing, code search, file reading, project structure analysis, and command execution. These are located in `src/main/scala/com/supercoder/tools/`.
-
-- **UI:** The TerminalChat interface which allows users to interact with the agent in a console environment. See `src/main/scala/com/supercoder/ui/TerminalChat.scala`.
-
-- **Base Classes:** Core abstractions such as `Agent` and `Tool` in `src/main/scala/com/supercoder/base/` define how agents and tools interact.
+- Code Search: Performs complex code searches across your project to quickly locate specific patterns.
+- Project Structure Exploration: Provides an organized view of your project's folders and files, making navigation a breeze.
+- Code Editing: Enables you to modify your codebase seamlessly with natural language commands.
+- Bug Fixing: Automatically fixes bugs and implements improvements based on your detailed requests.
+- Cursor Rules Support: Leverages Cursor Rules to intelligently understand and modify your code at precise locations.
 
 ## Installation
 
@@ -51,7 +49,7 @@ export SUPERCODER_MODEL=<URL>
 
 Note that, if you are using Google Gemini, you will need to set `SUPERCODER_GEMINI_MODE=true` as well.
 
-It's important to note that, the model you are using should support tools calling.
+It's important to note that the model you are using should support tools calling.
 
 ### Running the Coding Agent
 
@@ -86,18 +84,18 @@ For development purposes, follow these instructions to set up your environment:
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd SuperCoder
+git clone <repository-url>
+cd SuperCoder
    ```
 
 2. Build the project using SBT:
    ```bash
-   sbt compile
+sbt compile
    ```
 
 3. Run tests to ensure everything is working as expected:
    ```bash
-   sbt test
+sbt test
    ```
 
 ## Contributing
