@@ -12,11 +12,12 @@ lazy val root = project
       "io.circe" %% "circe-core" % "0.14.5",
       "io.circe" %% "circe-generic" % "0.14.5",
       "io.circe" %% "circe-parser" % "0.14.5",
-      "org.jline" % "jline" % "3.21.0"
+      "org.jline" % "jline" % "3.21.0",
+      "com.github.scopt" %% "scopt" % "4.1.0"
     )
   )
 
 enablePlugins(JavaAppPackaging)
 packageName := "supercoder"
-mainClass := Some("com.supercoder.run")
+mainClass := Some("com.supercoder.Main")
 maintainer := "hey@huy.rocks"
