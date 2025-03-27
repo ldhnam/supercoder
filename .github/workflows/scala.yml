@@ -3,11 +3,14 @@ name: CI
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [ "main" ]
 
 permissions:
-  contents: read
+  contents: write # needed for creating releases
+  packages: write # needed for creating releases
 
 jobs:
   build:
@@ -38,9 +41,20 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: supercoder-package-java${{ matrix.java-version }}
+        name: supercoder-package
         path: target/universal/supercoder-*.zip
         retention-days: 5
+
+    - name: Create a Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: target/universal/supercoder-*.zip
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Cleanup before cache
       run: |
