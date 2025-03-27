@@ -1,6 +1,8 @@
 # SuperCoder
 
-Welcome to SuperCoder! This project is designed to serve as a foundation for building a fully functional coding agent capable of interpreting natural language commands and executing code-related tasks. The project integrates various low-level tools (code search, editing, file reading, project structure analysis, and code execution) and provides a basic conversational interface via a terminal-based chat.
+Welcome to SuperCoder! A coding assistant that run in your terminal.
+
+![image](https://github.com/user-attachments/assets/201d7b80-9fa0-43f0-a775-46fe7640ee5e)
 
 ## Overview
 
