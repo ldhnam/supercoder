@@ -102,7 +102,7 @@ For development purposes, follow these instructions to set up your environment:
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome! Please check the [issues page](https://github.com/yourusername/SuperCoder/issues) if you want to contribute.
+Contributions, issues, and feature requests are welcome! Please check the [issues page](issues) if you want to contribute.
 
 ## License
 
