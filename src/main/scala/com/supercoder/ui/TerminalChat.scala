@@ -3,6 +3,7 @@ package com.supercoder.ui
 import com.supercoder.base.BaseChatAgent
 import com.supercoder.lib.Console
 import com.supercoder.lib.Console.{blue, bold, green, underline}
+import com.supercoder.build.BuildInfo
 import org.jline.reader.{LineReader, LineReaderBuilder, Reference, Widget}
 import org.jline.terminal.{Terminal, TerminalBuilder}
 
@@ -17,7 +18,7 @@ object TerminalChat {
     clearScreen()
     println(blue("█▀ █░█ █▀█ █▀▀ █▀█ █▀▀ █▀█ █▀▄ █▀▀ █▀█"))
     println(blue("▄█ █▄█ █▀▀ ██▄ █▀▄ █▄▄ █▄█ █▄▀ ██▄ █▀▄"))
-    println(blue("v0.1.1"))
+    println(blue(s"v${BuildInfo.version}"))
     println()
     println(blue("Type '/help' for available commands.\n"))
   }
@@ -26,8 +27,8 @@ object TerminalChat {
     println(underline("Available commands:"))
     println(s"  ${bold("/help")}  - Display this help message")
     println(s"  ${bold("/clear")} - Clear the terminal screen")
-    println(s"  ${bold("exit")}	- Terminate the chat session")
-    println(s"  ${bold("bye")}	- Terminate the chat session\n")
+    println(s"  ${bold("exit")}\t- Terminate the chat session")
+    println(s"  ${bold("bye")}\t- Terminate the chat session\n")
     println("Just type any message to chat with the agent.")
     println("To insert a new line in your message, use Shift+Enter.")
   }

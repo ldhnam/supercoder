@@ -2,10 +2,13 @@ val scala3Version = "3.6.4"
 
 lazy val root = project
   .in(file("."))
+  .enablePlugins(BuildInfoPlugin)
   .settings(
     name := "SuperCoder",
-    version := "0.1.1",
+    version := "0.1.2",
     scalaVersion := scala3Version,
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
+    buildInfoPackage := "com.supercoder.build",
     libraryDependencies ++= Seq(
       "org.scalameta" %% "munit" % "1.0.0" % Test,
       "com.openai" % "openai-java" % "0.33.0",
