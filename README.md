@@ -16,15 +16,14 @@ SuperCoder equips you with an array of powerful tools to simplify your developme
 
 ## Installation
 
-To install SuperCoder as a native binary, execute the following command:
+We have a pre-built binary that works on Linux, MacOS and Windows.
 
-```bash
-sbt universal:packageBin
-```
+- **Step 1:** Download the ZIP bundle from the [Release](https://github.com/huytd/supercoder/releases) page.
 
-This command will compile and package the project into a binary file located at `target/universal/supercoder-0.1.0-SNAPSHOT.zip`. Extract this file to access the binary in the `bin` directory.
-
-Copy the `supercoder` file to somewhere in your `PATH` to run the agent from anywhere in your terminal.
+  <img width="258" alt="image" src="https://github.com/user-attachments/assets/7d2d7196-1a35-4752-a6d0-5816955b81dc" />
+  
+- **Step 2:** Extract to a folder on your computer, and make sure the `bin/supercoder` or `bin/supercoder.bat` binary is accessible in your system's `PATH`.
+- **Step 3:** In your terminal, run the `supercoder` command from any folder you want to work on.
 
 ## Usage
 
