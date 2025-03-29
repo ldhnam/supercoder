@@ -15,8 +15,11 @@ object TerminalChat {
 
   def printHeader(): Unit = {
     clearScreen()
-    println(bold(blue("Welcome to Supercoder")))
-    println(green("Type '/help' for available commands.\n"))
+    println(blue("█▀ █░█ █▀█ █▀▀ █▀█ █▀▀ █▀█ █▀▄ █▀▀ █▀█"))
+    println(blue("▄█ █▄█ █▀▀ ██▄ █▀▄ █▄▄ █▄█ █▄▀ ██▄ █▀▄"))
+    println(blue("v0.1.1"))
+    println()
+    println(blue("Type '/help' for available commands.\n"))
   }
 
   def showHelp(): Unit = {
