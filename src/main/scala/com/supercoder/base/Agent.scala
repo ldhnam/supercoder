@@ -16,20 +16,14 @@ val BasePrompt = s"""
 # Tool calling
 For each function call, return a json object with function name and arguments within <@TOOL></@TOOL> XML tags:
 
-<@TOOL>
-{"name": <function-name>, "arguments": "<json-encoded-string-of-the-arguments>"}
-</@TOOL>
+<@TOOL>{"name": <function-name>, "arguments": "<json-encoded-string-of-the-arguments>"}</@TOOL>
 
 The arguments value is ALWAYS a JSON-encoded string, when there is no arguments, use empty string "".
 
 For example:
-<@TOOL>
-{"name": "file-read", "arguments": "{\"fileName\": \"example.txt\"}"}
-</@TOOL>
+<@TOOL>{"name": "file-read", "arguments": "{\"fileName\": \"example.txt\"}"}</@TOOL>
 
-<@TOOL>
-{"name": "project-structure", "arguments": ""}
-</@TOOL>
+<@TOOL>{"name": "project-structure", "arguments": ""}</@TOOL>
 
 The client will response with <@TOOL-RESULT>[content]</@TOOL-RESULT> XML tags to provide the result of the function call.
 Use it to continue the conversation with the user.
