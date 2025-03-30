@@ -16,7 +16,9 @@ lazy val root = project
       "io.circe" %% "circe-generic" % "0.14.5",
       "io.circe" %% "circe-parser" % "0.14.5",
       "org.jline" % "jline" % "3.21.0",
-      "com.github.scopt" %% "scopt" % "4.1.0"
+      "com.github.scopt" %% "scopt" % "4.1.0",
+      "com.lihaoyi" %% "requests" % "0.8.0",
+      "com.lihaoyi" %% "upickle" % "3.1.2"
     )
   )
 
