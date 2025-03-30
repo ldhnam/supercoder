@@ -14,7 +14,8 @@ import java.util
 import java.util.Optional
 import scala.collection.mutable.ListBuffer
 
-val BasePrompt = s"""
+object AgentConfig {
+  val BasePrompt = s"""
 # Tool calling
 For each function call, return a json object with function name and arguments within <@TOOL></@TOOL> XML tags:
 
@@ -36,9 +37,6 @@ For example:
 The client will response with <@TOOL-RESULT>[content]</@TOOL-RESULT> XML tags to provide the result of the function call.
 Use it to continue the conversation with the user.
 
-# Response format
-When responding to the user, use plain text format. NEVER use Markdown's bold or italic formatting.
-
 # Safety
 Please refuse to answer any unsafe or unethical requests.
 Do not execute any command that could harm the system or access sensitive information.
@@ -46,8 +44,6 @@ When you want to execute some potentially unsafe command, please ask for user co
 
 # Agent Instructions
 """
-
-object AgentConfig {
   val OpenAIAPIBaseURL: String = sys.env.get("SUPERCODER_BASE_URL")
     .orElse(sys.env.get("OPENAI_BASE_URL"))
     .getOrElse("https://api.openai.com/v1")
@@ -115,7 +111,7 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
   private def buildBaseParams(): ChatCompletionCreateParams.Builder = {
     val params = ChatCompletionCreateParams
       .builder()
-      .addSystemMessage(BasePrompt + prompt)
+      .addSystemMessage(AgentConfig.BasePrompt + prompt)
       .model(selectedModel)
 
     // Add all messages from chat history
@@ -141,6 +137,15 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
     import sun.misc.{Signal, SignalHandler}
     var cancelStreaming = false
     var streamingStarted = false
+
+    // Define markdown markers
+    val boldMarker = "**"
+    val codeMarker = "`"
+
+    // Add state flags for markdown
+    var inBold = false
+    var inInlineCode = false
+
     val intSignal = new Signal("INT")
     val oldHandler = Signal.handle(intSignal, new SignalHandler {
       override def handle(sig: Signal): Unit = {
@@ -155,6 +160,7 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
       streamingStarted = true
       val wordBuffer = new StringBuilder()
       var isInToolTag = false
+      var currentToolTagEndMarker: Option[String] = None // Keep track of the expected closing tag
 
       while(it.hasNext && !cancelStreaming) {
         val chunk = it.next()
@@ -163,100 +169,147 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
         if (delta.content().isPresent) {
           val content = delta.content().get()
           wordBuffer.append(content)
-          currentMessageBuilder.append(content)
+          // We defer appending to currentMessageBuilder until content is finalized/printed
 
           val toolStart = "<@TOOL>"
           val toolEnd = "</@TOOL>"
           val toolResultStart = "<@TOOL-RESULT>"
           val toolResultEnd = "</@TOOL-RESULT>"
 
-          var currentToolTagEndMarker: Option[String] = None
-
-          var processedSomething = true
-          while (processedSomething && wordBuffer.nonEmpty) {
-            processedSomething = false
+          var continueProcessingBuffer = true
+          while (continueProcessingBuffer && wordBuffer.nonEmpty) {
+            continueProcessingBuffer = false // Assume loop stops unless something is processed
 
             if (isInToolTag) {
-              val endMarker = currentToolTagEndMarker.getOrElse(toolEnd)
+              val endMarker = currentToolTagEndMarker.getOrElse(toolEnd) // Default, should be set
               val endTagIndex = wordBuffer.indexOf(endMarker)
               if (endTagIndex != -1) {
-                val contentToConsume = wordBuffer.substring(0, endTagIndex + endMarker.length)
-                if (AppConfig.isDebugMode) {
-                  print(red(contentToConsume))
-                }
-                wordBuffer.delete(0, contentToConsume.length)
+                // Found the end tag for the current tool block
+                val tagContentWithMarker = wordBuffer.substring(0, endTagIndex + endMarker.length)
+                if (AppConfig.isDebugMode) print(red(tagContentWithMarker)) else print(tagContentWithMarker) // Print the whole tag block
+                currentMessageBuilder.append(tagContentWithMarker) // Add to history
+                wordBuffer.delete(0, tagContentWithMarker.length)
                 isInToolTag = false
                 currentToolTagEndMarker = None
-                processedSomething = true
+                continueProcessingBuffer = true // Indicate something was processed
               } else {
-                if (AppConfig.isDebugMode) {
-                  print(red(wordBuffer.toString()))
-                }
-                wordBuffer.clear()
+                // End tag not yet in buffer, wait for more data
+                // No partial printing for tool tags
+              }
+            } else if (inBold) {
+              val endMarkerIndex = wordBuffer.indexOf(boldMarker)
+              if (endMarkerIndex != -1) {
+                // Found the end bold marker
+                val boldContent = wordBuffer.substring(0, endMarkerIndex)
+                val fullBoldBlock = boldMarker + boldContent + boldMarker
+                print(blue(fullBoldBlock)) // Print the complete bold block
+                currentMessageBuilder.append(fullBoldBlock) // Add to history
+                wordBuffer.delete(0, endMarkerIndex + boldMarker.length)
+                inBold = false
+                continueProcessingBuffer = true
+              } else {
+                // End marker not yet in buffer, wait for more data
+              }
+            } else if (inInlineCode) {
+              val endMarkerIndex = wordBuffer.indexOf(codeMarker)
+              if (endMarkerIndex != -1) {
+                // Found the end code marker
+                val codeContent = wordBuffer.substring(0, endMarkerIndex)
+                val fullCodeBlock = codeMarker + codeContent + codeMarker
+                print(blue(fullCodeBlock)) // Print the complete code block
+                currentMessageBuilder.append(fullCodeBlock) // Add to history
+                wordBuffer.delete(0, endMarkerIndex + codeMarker.length)
+                inInlineCode = false
+                continueProcessingBuffer = true
+              } else {
+                // End marker not yet in buffer, wait for more data
               }
             } else {
+              // Not in tool tag or markdown block: Look for start markers or process plain text
               val toolStartIndex = wordBuffer.indexOf(toolStart)
               val toolResultStartIndex = wordBuffer.indexOf(toolResultStart)
+              val boldStartIndex = wordBuffer.indexOf(boldMarker)
+              val codeStartIndex = wordBuffer.indexOf(codeMarker)
 
-              var startTagIndex = -1
-              var startMarker = ""
-              var expectedEndMarker = ""
+              // Find the earliest marker index
+              val markers = List(
+                (toolStartIndex, toolStart, toolEnd, false), // (index, startMarker, endMarker, isMarkdown)
+                (toolResultStartIndex, toolResultStart, toolResultEnd, false),
+                (boldStartIndex, boldMarker, boldMarker, true),
+                (codeStartIndex, codeMarker, codeMarker, true)
+              ).filter(_._1 != -1).sortBy(_._1) // Keep only found markers, sort by index
 
-              if (toolStartIndex != -1 && (toolResultStartIndex == -1 || toolStartIndex < toolResultStartIndex)) {
-                  startTagIndex = toolStartIndex
-                  startMarker = toolStart
-                  expectedEndMarker = toolEnd
-              } else if (toolResultStartIndex != -1) {
-                  startTagIndex = toolResultStartIndex
-                  startMarker = toolResultStart
-                  expectedEndMarker = toolResultEnd
-              }
+              if (markers.nonEmpty) {
+                val (startIndex, startMarker, endMarker, isMarkdownMarker) = markers.head
 
-              if (startTagIndex != -1) {
-                val beforeTag = wordBuffer.substring(0, startTagIndex)
-                if (beforeTag.nonEmpty) {
-                  val (words, remaining) = processWords(beforeTag)
+                // Process plain text before the marker
+                if (startIndex > 0) {
+                  val beforeMarker = wordBuffer.substring(0, startIndex)
+                  val (words, remaining) = processWords(beforeMarker)
                   if (words.nonEmpty) {
-                    words.foreach { case (word, ws) => print(blue(word)); print(ws) }
-                    wordBuffer.delete(0, beforeTag.length - remaining.length)
-                    processedSomething = true
+                    val processedText = words.map { case (word, ws) =>
+                      print(blue(word)); print(ws); word + ws // Print and collect text
+                    }.mkString
+                    currentMessageBuilder.append(processedText) // Add printed text to history
                   }
+                  // Handle any remaining partial word - print it as is for now
+                  if (remaining.nonEmpty) {
+                      print(blue(remaining))
+                      currentMessageBuilder.append(remaining)
+                  }
+                  wordBuffer.delete(0, startIndex) // Consume the processed plain text
+                  continueProcessingBuffer = true
                 }
 
-                if (wordBuffer.indexOf(startMarker) == 0) {
-                  if (AppConfig.isDebugMode) {
-                    print(red(startMarker))
+                // Handle the marker itself
+                if (wordBuffer.startsWith(startMarker)) {
+                  if (isMarkdownMarker) {
+                    // Start of a markdown block, just consume marker and set flag
+                    wordBuffer.delete(0, startMarker.length)
+                    if (startMarker == boldMarker) inBold = true
+                    else if (startMarker == codeMarker) inInlineCode = true
+                  } else {
+                    // Start of a tool tag block
+                    if (AppConfig.isDebugMode) print(red(startMarker)) else print(startMarker) // Print start tag
+                    currentMessageBuilder.append(startMarker) // Add start tag to history
+                    wordBuffer.delete(0, startMarker.length)
+                    isInToolTag = true
+                    currentToolTagEndMarker = Some(endMarker)
                   }
-                  wordBuffer.delete(0, startMarker.length)
-                  isInToolTag = true
-                  currentToolTagEndMarker = Some(expectedEndMarker)
-                  processedSomething = true
+                  continueProcessingBuffer = true
                 }
+                // If wordBuffer doesn't start with marker after deleting prefix, loop again
 
               } else {
+                // No markers found, process buffer as plain text
                 val (words, remaining) = processWords(wordBuffer.toString())
-                if (words.nonEmpty) { // Only process if complete words were found
-                    words.foreach { case (word, ws) => print(blue(word)); print(ws) }
-                    val processedLength = wordBuffer.length() - remaining.length()
-                    wordBuffer.delete(0, processedLength)
-                    processedSomething = true // Buffer content changed
+                if (words.nonEmpty) {
+                  val processedText = words.map{ case (word, ws) =>
+                      print(blue(word)); print(ws); word + ws // Print and collect text
+                  }.mkString
+                  currentMessageBuilder.append(processedText) // Add printed text to history
+                  val processedLength = wordBuffer.length() - remaining.length()
+                  wordBuffer.delete(0, processedLength)
+                  continueProcessingBuffer = true
                 }
+                // Keep 'remaining' in buffer for next iteration or chunk
               }
             }
-          }
-        }
-      }
+          } // End of inner buffer processing loop
+        } // End if delta.content().isPresent
+      } // End of main while(it.hasNext) loop
 
-      // Print out the rest of the word buffer if it has any content
+      // After the loop, process any remaining content in the buffer
       if (wordBuffer.nonEmpty) {
-        if (isInToolTag) {
-          if (AppConfig.isDebugMode) {
-            print(red(wordBuffer.toString()))
+          // If streaming was cancelled or ended mid-tag/markdown, print remaining plainly
+          if (isInToolTag || inBold || inInlineCode) {
+              if(AppConfig.isDebugMode) print(red(wordBuffer.toString())) else print(blue(wordBuffer.toString()))
+          } else {
+              // Print remaining plain text
+              print(blue(wordBuffer.toString()))
           }
-        } else {
-          print(blue(wordBuffer.toString()))
-        }
-        wordBuffer.clear()
+          currentMessageBuilder.append(wordBuffer.toString()) // Append whatever is left to history
+          wordBuffer.clear()
       }
 
       if (cancelStreaming) {
