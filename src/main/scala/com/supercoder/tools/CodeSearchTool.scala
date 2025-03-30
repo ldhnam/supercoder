@@ -28,7 +28,7 @@ object CodeSearchTool extends Tool {
         val query = args.query
         println(green(s"🔍 Search code for query: ${query}"))
         try {
-          val command = s"""rg -e "$query" ."""
+          val command = s"""git grep -n "$query" ."""
           val output: String = command.!!
           return output
         } catch {
