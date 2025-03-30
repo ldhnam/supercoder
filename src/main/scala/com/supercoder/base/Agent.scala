@@ -3,27 +3,35 @@ package com.supercoder.base
 import com.openai.client.okhttp.OpenAIOkHttpClient
 import com.openai.core.http.Headers
 import com.openai.models.*
-
-import java.util
-import java.util.Optional
-import scala.collection.mutable.ListBuffer
+import com.supercoder.Main
+import com.supercoder.Main.AppConfig
 import com.supercoder.lib.Console.{blue, red}
 import io.circe.*
 import io.circe.generic.auto.*
 import io.circe.parser.*
 
+import java.util
+import java.util.Optional
+import scala.collection.mutable.ListBuffer
+
 val BasePrompt = s"""
 # Tool calling
 For each function call, return a json object with function name and arguments within <@TOOL></@TOOL> XML tags:
 
-<@TOOL>{"name": <function-name>, "arguments": "<json-encoded-string-of-the-arguments>"}</@TOOL>
+<@TOOL>
+{"name": <function-name>, "arguments": "<json-encoded-string-of-the-arguments>"}
+</@TOOL>
 
 The arguments value is ALWAYS a JSON-encoded string, when there is no arguments, use empty string "".
 
 For example:
-<@TOOL>{"name": "file-read", "arguments": "{\"fileName\": \"example.txt\"}"}</@TOOL>
+<@TOOL>
+{"name": "file-read", "arguments": "{\"fileName\": \"example.txt\"}"}
+</@TOOL>
 
-<@TOOL>{"name": "project-structure", "arguments": ""}</@TOOL>
+<@TOOL>
+{"name": "project-structure", "arguments": ""}
+</@TOOL>
 
 The client will response with <@TOOL-RESULT>[content]</@TOOL-RESULT> XML tags to provide the result of the function call.
 Use it to continue the conversation with the user.
@@ -66,7 +74,7 @@ case class ToolCallDescription(
 
 }
 
-abstract class BaseChatAgent(prompt: String) {
+abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIModel) {
   private val client = OpenAIOkHttpClient.builder()
     .baseUrl(AgentConfig.OpenAIAPIBaseURL)
     .apiKey(AgentConfig.OpenAIAPIKey)
@@ -78,6 +86,8 @@ abstract class BaseChatAgent(prompt: String) {
 
   private var chatHistory: ListBuffer[ChatCompletionMessageParam] =
     ListBuffer.empty
+
+  def selectedModel: String = if (model.nonEmpty) model else AgentConfig.OpenAIModel
 
   def toolExecution(toolCall: ToolCallDescription): String
   def toolDefinitionList: List[FunctionDefinition]
@@ -106,7 +116,7 @@ abstract class BaseChatAgent(prompt: String) {
     val params = ChatCompletionCreateParams
       .builder()
       .addSystemMessage(BasePrompt + prompt)
-      .model(AgentConfig.OpenAIModel)
+      .model(selectedModel)
 
     // Add all messages from chat history
     chatHistory.foreach(params.addMessage)
@@ -144,48 +154,109 @@ abstract class BaseChatAgent(prompt: String) {
       val it = streamResponse.stream().iterator()
       streamingStarted = true
       val wordBuffer = new StringBuilder()
-      var isHiddenTokens = false
+      var isInToolTag = false
 
       while(it.hasNext && !cancelStreaming) {
         val chunk = it.next()
         val delta = chunk.choices.getFirst.delta
 
         if (delta.content().isPresent) {
-          val chunkContent = delta.content().get()
-          currentMessageBuilder.append(chunkContent)
-          wordBuffer.append(chunkContent)
-          val bufferContent = wordBuffer.toString()
-          if (bufferContent.contains(" ")) {
-            val words = bufferContent.split(" ")
-            val endsWithSpace = bufferContent.last.isWhitespace
-            val completeWords = if (endsWithSpace) words else words.dropRight(1)
-            for (word <- completeWords) {
-              if (word.contains("<@TOOL>")) {
-                isHiddenTokens = true
+          val content = delta.content().get()
+          wordBuffer.append(content)
+          currentMessageBuilder.append(content)
+
+          val toolStart = "<@TOOL>"
+          val toolEnd = "</@TOOL>"
+          val toolResultStart = "<@TOOL-RESULT>"
+          val toolResultEnd = "</@TOOL-RESULT>"
+
+          var currentToolTagEndMarker: Option[String] = None
+
+          var processedSomething = true
+          while (processedSomething && wordBuffer.nonEmpty) {
+            processedSomething = false
+
+            if (isInToolTag) {
+              val endMarker = currentToolTagEndMarker.getOrElse(toolEnd)
+              val endTagIndex = wordBuffer.indexOf(endMarker)
+              if (endTagIndex != -1) {
+                val contentToConsume = wordBuffer.substring(0, endTagIndex + endMarker.length)
+                if (AppConfig.isDebugMode) {
+                  print(red(contentToConsume))
+                }
+                wordBuffer.delete(0, contentToConsume.length)
+                isInToolTag = false
+                currentToolTagEndMarker = None
+                processedSomething = true
+              } else {
+                if (AppConfig.isDebugMode) {
+                  print(red(wordBuffer.toString()))
+                }
+                wordBuffer.clear()
               }
-              if (word.contains("</@TOOL>")) {
-                isHiddenTokens = false
+            } else {
+              val toolStartIndex = wordBuffer.indexOf(toolStart)
+              val toolResultStartIndex = wordBuffer.indexOf(toolResultStart)
+
+              var startTagIndex = -1
+              var startMarker = ""
+              var expectedEndMarker = ""
+
+              if (toolStartIndex != -1 && (toolResultStartIndex == -1 || toolStartIndex < toolResultStartIndex)) {
+                  startTagIndex = toolStartIndex
+                  startMarker = toolStart
+                  expectedEndMarker = toolEnd
+              } else if (toolResultStartIndex != -1) {
+                  startTagIndex = toolResultStartIndex
+                  startMarker = toolResultStart
+                  expectedEndMarker = toolResultEnd
               }
-              if (!isHiddenTokens) {
-                print(blue(word + " "))
+
+              if (startTagIndex != -1) {
+                val beforeTag = wordBuffer.substring(0, startTagIndex)
+                if (beforeTag.nonEmpty) {
+                  val (words, remaining) = processWords(beforeTag)
+                  if (words.nonEmpty) {
+                    words.foreach { case (word, ws) => print(blue(word)); print(ws) }
+                    wordBuffer.delete(0, beforeTag.length - remaining.length)
+                    processedSomething = true
+                  }
+                }
+
+                if (wordBuffer.indexOf(startMarker) == 0) {
+                  if (AppConfig.isDebugMode) {
+                    print(red(startMarker))
+                  }
+                  wordBuffer.delete(0, startMarker.length)
+                  isInToolTag = true
+                  currentToolTagEndMarker = Some(expectedEndMarker)
+                  processedSomething = true
+                }
+
+              } else {
+                val (words, remaining) = processWords(wordBuffer.toString())
+                if (words.nonEmpty) { // Only process if complete words were found
+                    words.foreach { case (word, ws) => print(blue(word)); print(ws) }
+                    val processedLength = wordBuffer.length() - remaining.length()
+                    wordBuffer.delete(0, processedLength)
+                    processedSomething = true // Buffer content changed
+                }
               }
-            }
-            wordBuffer.clear()
-            if (!endsWithSpace && words.nonEmpty) {
-              wordBuffer.append(words.last)
             }
           }
         }
       }
 
+      // Print out the rest of the word buffer if it has any content
       if (wordBuffer.nonEmpty) {
-        val remainingContent = wordBuffer.toString()
-        if (remainingContent.nonEmpty) {
-          if (!isHiddenTokens) {
-            println(blue(remainingContent))
+        if (isInToolTag) {
+          if (AppConfig.isDebugMode) {
+            print(red(wordBuffer.toString()))
           }
-          currentMessageBuilder.append(remainingContent)
+        } else {
+          print(blue(wordBuffer.toString()))
         }
+        wordBuffer.clear()
       }
 
       if (cancelStreaming) {
@@ -225,6 +296,33 @@ abstract class BaseChatAgent(prompt: String) {
         handleToolCall(currentToolCall)
       }
     }
+  }
+
+  // Helper function to process words and whitespace
+  private def processWords(text: String): (ListBuffer[(String, String)], String) = {
+    val words = ListBuffer[(String, String)]()
+    var remainingText = text
+    var continueProcessing = true
+
+    while (continueProcessing) {
+      val whitespaceIndex = remainingText.indexWhere(_.isWhitespace)
+      if (whitespaceIndex != -1) {
+        val word = remainingText.substring(0, whitespaceIndex)
+        val whitespace = remainingText.substring(whitespaceIndex).takeWhile(_.isWhitespace)
+        if (word.nonEmpty) {
+          words += ((word, whitespace))
+        } else {
+          // Handle leading whitespace? For now, just consume it with the next word or as trailing.
+          // If printing just whitespace: print(whitespace)
+        }
+        remainingText = remainingText.substring(whitespaceIndex + whitespace.length)
+        if (remainingText.isEmpty) continueProcessing = false
+      } else {
+        // No more whitespace, the rest is a partial word or empty
+        continueProcessing = false
+      }
+    }
+    (words, remainingText) // Return processed words and any remaining partial word
   }
 
   private def handleToolCall(toolCall: ToolCallDescription): Unit = {
