@@ -2,7 +2,7 @@
 
 Welcome to SuperCoder! A coding agent that runs in your terminal.
 
-![image](https://github.com/user-attachments/assets/201d7b80-9fa0-43f0-a775-46fe7640ee5e)
+<img width="1323" alt="image" src="https://github.com/user-attachments/assets/bf8944b7-4c64-405e-92c3-5217caa351e6" />
 
 ## Features
 
