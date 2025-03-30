@@ -5,7 +5,7 @@ import com.openai.core.http.Headers
 import com.openai.models.*
 import com.supercoder.Main
 import com.supercoder.Main.AppConfig
-import com.supercoder.lib.Console.{blue, red}
+import com.supercoder.lib.Console.{blue, red, green, yellow, bold as consoleBold, underline}
 import io.circe.*
 import io.circe.generic.auto.*
 import io.circe.parser.*
@@ -140,11 +140,19 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
 
     // Define markdown markers
     val boldMarker = "**"
+    val italicMarker = "*"
     val codeMarker = "`"
+    val codeBlockStart = "```"
+    val codeBlockEnd = "```"
+    val bulletMarker = "- "
+    val headerMarker = "#"
 
     // Add state flags for markdown
     var inBold = false
+    var inItalic = false
     var inInlineCode = false
+    var inCodeBlock = false
+    var currentHeader = 0 // 0 means not in header, 1-6 represents h1-h6
 
     val intSignal = new Signal("INT")
     val oldHandler = Signal.handle(intSignal, new SignalHandler {
@@ -186,7 +194,7 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
               if (endTagIndex != -1) {
                 // Found the end tag for the current tool block
                 val tagContentWithMarker = wordBuffer.substring(0, endTagIndex + endMarker.length)
-                if (AppConfig.isDebugMode) print(red(tagContentWithMarker)) else print(tagContentWithMarker) // Print the whole tag block
+                if (AppConfig.isDebugMode) print(red(tagContentWithMarker)) else print("") // Don't print tool tags
                 currentMessageBuilder.append(tagContentWithMarker) // Add to history
                 wordBuffer.delete(0, tagContentWithMarker.length)
                 isInToolTag = false
@@ -196,16 +204,44 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
                 // End tag not yet in buffer, wait for more data
                 // No partial printing for tool tags
               }
+            } else if (inCodeBlock) {
+              val endMarkerIndex = wordBuffer.indexOf(codeBlockEnd)
+              if (endMarkerIndex != -1) {
+                // Found the end code block marker
+                val codeContent = wordBuffer.substring(0, endMarkerIndex)
+                val fullCodeBlock = codeBlockStart + codeContent + codeBlockEnd
+                print(yellow(fullCodeBlock)) // Print the complete code block
+                currentMessageBuilder.append(fullCodeBlock) // Add to history
+                wordBuffer.delete(0, endMarkerIndex + codeBlockEnd.length)
+                inCodeBlock = false
+                continueProcessingBuffer = true
+              } else {
+                // End marker not yet in buffer, wait for more data
+              }
             } else if (inBold) {
               val endMarkerIndex = wordBuffer.indexOf(boldMarker)
               if (endMarkerIndex != -1) {
                 // Found the end bold marker
                 val boldContent = wordBuffer.substring(0, endMarkerIndex)
                 val fullBoldBlock = boldMarker + boldContent + boldMarker
-                print(blue(fullBoldBlock)) // Print the complete bold block
+                print(consoleBold(fullBoldBlock)) // Print the complete bold block
                 currentMessageBuilder.append(fullBoldBlock) // Add to history
                 wordBuffer.delete(0, endMarkerIndex + boldMarker.length)
                 inBold = false
+                continueProcessingBuffer = true
+              } else {
+                // End marker not yet in buffer, wait for more data
+              }
+            } else if (inItalic) {
+              val endMarkerIndex = wordBuffer.indexOf(italicMarker)
+              if (endMarkerIndex != -1) {
+                // Found the end italic marker
+                val italicContent = wordBuffer.substring(0, endMarkerIndex)
+                val fullItalicBlock = italicMarker + italicContent + italicMarker
+                print(green(fullItalicBlock)) // Print the complete italic block
+                currentMessageBuilder.append(fullItalicBlock) // Add to history
+                wordBuffer.delete(0, endMarkerIndex + italicMarker.length)
+                inItalic = false
                 continueProcessingBuffer = true
               } else {
                 // End marker not yet in buffer, wait for more data
@@ -216,7 +252,7 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
                 // Found the end code marker
                 val codeContent = wordBuffer.substring(0, endMarkerIndex)
                 val fullCodeBlock = codeMarker + codeContent + codeMarker
-                print(blue(fullCodeBlock)) // Print the complete code block
+                print(yellow(fullCodeBlock)) // Print the complete code block
                 currentMessageBuilder.append(fullCodeBlock) // Add to history
                 wordBuffer.delete(0, endMarkerIndex + codeMarker.length)
                 inInlineCode = false
@@ -224,19 +260,48 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
               } else {
                 // End marker not yet in buffer, wait for more data
               }
+            } else if (currentHeader > 0) {
+              // Headers end at the first newline
+              val endMarkerIndex = wordBuffer.indexOf("\n")
+              if (endMarkerIndex != -1) {
+                val headerContent = wordBuffer.substring(0, endMarkerIndex)
+                print(consoleBold(underline(headerContent)) + "\n") // Add newline after header
+                currentMessageBuilder.append(headerContent + "\n") // Add to history with newline
+                wordBuffer.delete(0, endMarkerIndex + 1) // +1 to include the newline
+                currentHeader = 0
+                continueProcessingBuffer = true
+              } else {
+                // End of header not yet in buffer
+              }
             } else {
               // Not in tool tag or markdown block: Look for start markers or process plain text
               val toolStartIndex = wordBuffer.indexOf(toolStart)
               val toolResultStartIndex = wordBuffer.indexOf(toolResultStart)
               val boldStartIndex = wordBuffer.indexOf(boldMarker)
+              val italicStartIndex = wordBuffer.indexOf(italicMarker)
               val codeStartIndex = wordBuffer.indexOf(codeMarker)
+              val codeBlockStartIndex = wordBuffer.indexOf(codeBlockStart)
+              
+              // Check for bullet points
+              val bulletStartIndex = wordBuffer.indexOf(bulletMarker)
+              val isBulletStart = bulletStartIndex != -1 && 
+                (bulletStartIndex == 0 || wordBuffer.charAt(bulletStartIndex - 1) == '\n')
+              
+              // Check for headers
+              val headerStartIndex = wordBuffer.indexOf(headerMarker)
+              val isHeaderStart = headerStartIndex != -1 && 
+                (headerStartIndex == 0 || wordBuffer.charAt(headerStartIndex - 1) == '\n')
 
               // Find the earliest marker index
               val markers = List(
                 (toolStartIndex, toolStart, toolEnd, false), // (index, startMarker, endMarker, isMarkdown)
                 (toolResultStartIndex, toolResultStart, toolResultEnd, false),
                 (boldStartIndex, boldMarker, boldMarker, true),
-                (codeStartIndex, codeMarker, codeMarker, true)
+                (italicStartIndex, italicMarker, italicMarker, true),
+                (codeStartIndex, codeMarker, codeMarker, true),
+                (codeBlockStartIndex, codeBlockStart, codeBlockEnd, true),
+                (if (isBulletStart) bulletStartIndex else -1, bulletMarker, "\n", true),
+                (if (isHeaderStart) headerStartIndex else -1, headerMarker, "\n", true)
               ).filter(_._1 != -1).sortBy(_._1) // Keep only found markers, sort by index
 
               if (markers.nonEmpty) {
@@ -264,19 +329,73 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
                 // Handle the marker itself
                 if (wordBuffer.startsWith(startMarker)) {
                   if (isMarkdownMarker) {
-                    // Start of a markdown block, just consume marker and set flag
-                    wordBuffer.delete(0, startMarker.length)
-                    if (startMarker == boldMarker) inBold = true
-                    else if (startMarker == codeMarker) inInlineCode = true
+                    // Handle different markdown element starts
+                    if (startMarker == boldMarker) {
+                      // Skip processing if it's actually part of code block start
+                      if (!wordBuffer.startsWith(codeBlockStart)) {
+                        wordBuffer.delete(0, boldMarker.length)
+                        inBold = true
+                        continueProcessingBuffer = true
+                      }
+                    } else if (startMarker == italicMarker) {
+                      // Make sure it's not part of bold marker or already in bold
+                      if (!wordBuffer.startsWith(boldMarker) && !inBold) {
+                        wordBuffer.delete(0, italicMarker.length)
+                        inItalic = true
+                        continueProcessingBuffer = true
+                      }
+                    } else if (startMarker == codeMarker) {
+                      // Make sure it's not part of code block marker
+                      if (!wordBuffer.startsWith(codeBlockStart)) {
+                        wordBuffer.delete(0, codeMarker.length)
+                        inInlineCode = true
+                        continueProcessingBuffer = true
+                      }
+                    } else if (startMarker == codeBlockStart) {
+                      wordBuffer.delete(0, codeBlockStart.length)
+                      inCodeBlock = true
+                      continueProcessingBuffer = true
+                    } else if (startMarker == bulletMarker) {
+                      // Handle bullet points
+                      val lineEndIndex = wordBuffer.indexOf("\n")
+                      if (lineEndIndex != -1) {
+                        val bulletLine = wordBuffer.substring(0, lineEndIndex)
+                        print(green(bulletLine + "\n"))
+                        currentMessageBuilder.append(bulletLine + "\n")
+                        wordBuffer.delete(0, lineEndIndex + 1)
+                      } else {
+                        // End of bullet not found yet, continue with other markers for now
+                      }
+                      continueProcessingBuffer = true
+                    } else if (startMarker == headerMarker) {
+                      // Handle headers - count number of # symbols
+                      var headerLevel = 0
+                      var i = 0
+                      while (i < wordBuffer.length && wordBuffer.charAt(i) == '#') {
+                        headerLevel += 1
+                        i += 1
+                      }
+                      
+                      if (headerLevel > 0 && i < wordBuffer.length && wordBuffer.charAt(i) == ' ') {
+                        // Valid header format - print in special format
+                        currentHeader = headerLevel
+                        print(consoleBold(underline(wordBuffer.substring(0, i + 1))))
+                        currentMessageBuilder.append(wordBuffer.substring(0, i + 1))
+                        wordBuffer.delete(0, i + 1)
+                        continueProcessingBuffer = true
+                      } else {
+                        // Not a proper header format, treat as normal text
+                      }
+                    }
                   } else {
                     // Start of a tool tag block
-                    if (AppConfig.isDebugMode) print(red(startMarker)) else print(startMarker) // Print start tag
+                    if (AppConfig.isDebugMode) print(red(startMarker)) else print("") // Don't print tool tag markers
                     currentMessageBuilder.append(startMarker) // Add start tag to history
                     wordBuffer.delete(0, startMarker.length)
                     isInToolTag = true
                     currentToolTagEndMarker = Some(endMarker)
+                    continueProcessingBuffer = true
                   }
-                  continueProcessingBuffer = true
                 }
                 // If wordBuffer doesn't start with marker after deleting prefix, loop again
 
@@ -302,7 +421,7 @@ abstract class BaseChatAgent(prompt: String, model: String = AgentConfig.OpenAIM
       // After the loop, process any remaining content in the buffer
       if (wordBuffer.nonEmpty) {
           // If streaming was cancelled or ended mid-tag/markdown, print remaining plainly
-          if (isInToolTag || inBold || inInlineCode) {
+          if (isInToolTag || inBold || inItalic || inInlineCode || inCodeBlock || currentHeader > 0) {
               if(AppConfig.isDebugMode) print(red(wordBuffer.toString())) else print(blue(wordBuffer.toString()))
           } else {
               // Print remaining plain text
